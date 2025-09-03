@@ -1,0 +1,19 @@
+version: '3.9'
+
+services:
+  dminvest-web:
+    build: .
+    container_name: dminvest-web
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:3
+    container_name: dminvest-ngrok
+    command: "http --region=us dminvest-web:5000 --authtoken=2o4tLvAOkkr91NNrlQuZ2YTP0Oy_5ewDTpLVDfUbSnE7YUngy"
+    ports:
+      - "4040:4040"
+    depends_on:
+      - dminvest-web
+    restart: unless-stopped

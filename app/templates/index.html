@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador Comparativo de Investimentos</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { background: #f4f6f8; font-family: 'Arial', sans-serif; }
+  .card { border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+  .card h5 { font-weight: 600; }
+  .card p { margin-bottom: 0; }
+  #chart { max-height: 450px; }
+  .form-label { font-weight: 500; }
+  .btn-primary { background: linear-gradient(90deg,#4e73df,#224abe); border:none; }
+  .btn-primary:hover { background: linear-gradient(90deg,#224abe,#4e73df); }
+  .investment-card { transition: transform 0.2s; }
+  .investment-card:hover { transform: translateY(-5px); }
+</style>
+</head>
+<body>
+<div class="container py-5">
+  <h1 class="text-center mb-5">Simulador Comparativo de Investimentos</h1>
+
+  <!-- Formulário -->
+  <div class="card p-4 mb-5">
+    <form id="simForm" class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Valor Inicial (R$)</label>
+        <input type="text" id="amount" class="form-control" placeholder="30.000,00">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Anos</label>
+        <input type="number" id="years" class="form-control" step="0.1" placeholder="2">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Taxa Selic (%)</label>
+        <input type="text" id="selicInput" class="form-control" placeholder="15">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Aporte Mensal (R$)</label>
+        <input type="text" id="contribution" class="form-control" placeholder="1.000,00">
+      </div>
+      <div class="col-md-12 d-flex align-items-end">
+        <button type="button" onclick="runSim()" class="btn btn-primary w-100 mt-3">🚀 Simular</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Resultado Cards -->
+  <div class="row mb-4" id="resultCards" style="display:none;"></div>
+
+  <!-- Gráfico -->
+  <div class="card p-4">
+    <h5 class="text-center mb-3">Evolução do Investimento</h5>
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<script>
+// Formata valores em BRL
+function formatBRL(value){
+  return Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+
+// Converte string BRL para número
+function parseBRL(value){
+  return Number(value.replace(/\./g,'').replace(',','.')) || 0;
+}
+
+// Juros compostos com aporte
+function calcInvestment(amount, monthlyRate, months, contribution){
+  let bal = amount;
+  let series = [];
+  for(let i=1;i<=months;i++){
+    bal = bal*(1+monthlyRate) + contribution;
+    series.push(bal);
+  }
+  return series;
+}
+
+// Formatação de input BRL
+function formatInputBRL(input){
+  input.addEventListener('input',()=>{
+    let value = input.value.replace(/\D/g,'');
+    value = (Number(value)/100).toFixed(2);
+    input.value = value.replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  });
+}
+formatInputBRL(document.getElementById('amount'));
+formatInputBRL(document.getElementById('contribution'));
+
+// Simulação
+function runSim(){
+  const amount = parseBRL(document.getElementById('amount').value);
+  const years = parseFloat(document.getElementById('years').value) || 0;
+  const contribution = parseBRL(document.getElementById('contribution').value);
+  let selic = parseFloat(document.getElementById('selicInput').value.replace(',','.')) || 0;
+
+  const months = years*12;
+
+  const rates = {
+    "Poupança": (selic<=8.5?selic*0.7:0.5)/100/12,
+    "CDB": selic*0.9/100/12,
+    "Tesouro Selic": selic/100/12,
+    "LCI": selic*0.85/100/12,
+    "LCA": selic*0.85/100/12
+  };
+
+  const series = {};
+  const finalBalances = {};
+  for(let inv in rates){
+    series[inv] = calcInvestment(amount,rates[inv],months,contribution);
+    finalBalances[inv] = series[inv][series[inv].length-1];
+  }
+
+  // Mostrar Cards
+  const resultCards = document.getElementById('resultCards');
+  resultCards.innerHTML = "";
+  const colors = {
+    "Poupança":"#FF6384",
+    "CDB":"#36A2EB",
+    "Tesouro Selic":"#4BC0C0",
+    "LCI":"#FFCE56",
+    "LCA":"#9966FF"
+  };
+  for(let inv in finalBalances){
+    const card = document.createElement('div');
+    card.className = "col-md-2 mb-3";
+    card.innerHTML = `
+      <div class="card p-3 text-center investment-card" style="border-top: 4px solid ${colors[inv]}">
+        <h5>${inv}</h5>
+        <p class="fs-5 fw-bold">${formatBRL(finalBalances[inv])}</p>
+      </div>`;
+    resultCards.appendChild(card);
+  }
+  resultCards.style.display="flex";
+
+  // Gráfico
+  const ctx = document.getElementById('chart').getContext('2d');
+
+  if(window._chart) window._chart.destroy();
+
+  window._chart = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:Array.from({length:months},(_,i)=>i+1),
+      datasets:Object.keys(series).map(inv=>({
+        label:inv,
+        data:series[inv],
+        borderColor:colors[inv],
+        backgroundColor:colors[inv].replace("rgb","rgba").replace(")"," ,0.1)"),
+        fill:true,
+        tension:0.3,
+        pointRadius:3,
+        pointHoverRadius:6
+      }))
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        tooltip:{
+          mode:'index',
+          intersect:false,
+          callbacks:{
+            label:function(context){ return formatBRL(context.raw); }
+          }
+        },
+        legend:{ position:'top' }
+      },
+      interaction: { mode:'nearest', axis:'x', intersect:false },
+      scales:{
+        x:{ title:{ display:true, text:"Meses" } },
+        y:{ title:{ display:true, text:"Saldo (R$)" } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
